@@ -168,6 +168,10 @@ class VisualizerGUI:
         if not output_path:
             return
         
+        # Ensure .mp4 extension
+        if not output_path.lower().endswith('.mp4'):
+            output_path += '.mp4'
+        
         # Confirm before rendering
         duration_estimate = "several minutes"
         if messagebox.askyesno("Confirm Render",
@@ -194,6 +198,10 @@ class VisualizerGUI:
         
         if not output_path:
             return
+        
+        # Ensure .mp4 extension
+        if not output_path.lower().endswith('.mp4'):
+            output_path += '.mp4'
         
         # Start quick preview render
         self.render_manager.start_render(output_path, preview_seconds=30)

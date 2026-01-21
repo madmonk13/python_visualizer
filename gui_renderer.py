@@ -274,29 +274,25 @@ class RenderManager:
                 text=MSG_ADDING_AUDIO))
             self.root.after(0, lambda: self.preview.set_info("Adding audio to video..."))
             
-            # First, check FFmpeg version
-            try:
-                version_check = subprocess.run(
-                    ['ffmpeg', '-version'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                print(f"FFmpeg version check: {version_check.stdout.split()[2] if version_check.stdout else 'unknown'}")
-            except Exception as e:
-                print(f"Warning: Could not check FFmpeg version: {e}")
-            
-            # Use -t flag if rendering preview to limit audio duration
+            # Build FFmpeg command properly
             ffmpeg_cmd = [
-                'ffmpeg', '-i', temp_video_path, '-i', settings['audio_path'],
-                '-c:v', 'libx264', '-c:a', 'aac',
-                '-shortest', '-y', output_path
+                'ffmpeg',
+                '-i', temp_video_path,
+                '-i', settings['audio_path']
             ]
             
+            # Add duration limit if rendering preview (BEFORE the codec options)
             if preview_seconds:
-                # Insert duration limit before output
-                ffmpeg_cmd.insert(-2, '-t')
-                ffmpeg_cmd.insert(-2, str(render_duration))
+                ffmpeg_cmd.extend(['-t', str(render_duration)])
+            
+            # Add codec and output options
+            ffmpeg_cmd.extend([
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-shortest',
+                '-y',
+                output_path
+            ])
             
             try:
                 result = subprocess.run(
@@ -327,7 +323,7 @@ STDERR:
                     pass
                 
                 # Raise with more details
-                raise Exception(f"FFmpeg failed with code {e.returncode}.\n\nError output:\n{e.stderr[:500]}")
+                raise Exception(f"FFmpeg failed with code {e.returncode}.\n\nError output:\n{e.stderr}")
             
             os.remove(temp_video_path)
             
