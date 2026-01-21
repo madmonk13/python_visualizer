@@ -1,11 +1,13 @@
 """
 Ring and cover art rendering module
 Handles cover image display and reactive ring effects
+Uses modular ring shape system
 """
 
 import math
 import numpy as np
 from PIL import Image, ImageDraw
+import rings
 
 
 class RingRenderer:
@@ -122,6 +124,13 @@ class RingRenderer:
         # Draw rings if not disabled and we have at least one ring to draw
         # Rings are always drawn at original center (no offset applied)
         if not disable_rings and len(rings_to_draw) > 0:
+            # Get the ring shape instance
+            ring_shape_instance = rings.get_ring_shape(ring_shape)
+            
+            if ring_shape_instance is None:
+                print(f"Warning: Ring shape '{ring_shape}' not found, using circle")
+                ring_shape_instance = rings.get_ring_shape('circle')
+            
             # Calculate rotation angle based on ring_rotation setting
             if ring_rotation == 'cw':
                 base_ring_angle = math.degrees(rotation)  # Clockwise
@@ -191,10 +200,10 @@ class RingRenderer:
                         ring_layer = Image.new('RGBA', (self.width, self.height), (0, 0, 0, 0))
                     ring_draw = ImageDraw.Draw(ring_layer)
                     
-                    # Draw this ring
-                    self._draw_ring_shape(ring_draw, canvas_center_x, canvas_center_y, ring_size, 
-                                        ring_size, ring_shape, ring_color, 
-                                        line_width, beat_intensity)
+                    # Draw this ring using the modular shape
+                    self._draw_modular_ring(ring_draw, canvas_center_x, canvas_center_y, 
+                                          ring_size, ring_size, ring_shape_instance, 
+                                          ring_color, line_width, beat_intensity)
                     
                     # Rotate this ring's layer
                     ring_layer = ring_layer.rotate(total_ring_angle, expand=False, 
@@ -205,9 +214,9 @@ class RingRenderer:
                     all_rings_layer = Image.alpha_composite(all_rings_layer, ring_layer)
                 else:
                     # No stagger or no rotation - draw directly on all_rings_layer
-                    self._draw_ring_shape(all_rings_draw, canvas_center_x, canvas_center_y, ring_size, 
-                                        ring_size, ring_shape, ring_color, 
-                                        line_width, beat_intensity)
+                    self._draw_modular_ring(all_rings_draw, canvas_center_x, canvas_center_y, 
+                                          ring_size, ring_size, ring_shape_instance, 
+                                          ring_color, line_width, beat_intensity)
             
             # Apply rotation to ALL rings at once (if needed and no stagger)
             if needs_rotation and all(s == 0 for s in ring_stagger_offsets):
@@ -226,207 +235,14 @@ class RingRenderer:
             # Composite all rings onto the main image
             img.paste(all_rings_layer, (0, 0), all_rings_layer)
     
-    def _draw_ring_shape(self, draw, cx, cy, w, h, shape, color, width, beat):
-        """Draw a ring with the specified shape"""
+    def _draw_modular_ring(self, draw, cx, cy, w, h, ring_shape_instance, color, width, beat):
+        """Draw a ring using the modular ring shape system"""
         # Draw glow layers
         for glow in range(8, 0, -1):
-            alpha = int((200 + beat * 55) * (1 - glow / 8))
-            glow_color = (*color, alpha)
-            
-            if shape == 'square':
-                draw.rectangle(
-                    [cx - w - glow*2, cy - h - glow*2, cx + w + glow*2, cy + h + glow*2],
-                    outline=glow_color, width=width + glow
-                )
-            elif shape == 'triangle':
-                points = [
-                    (cx, cy - h - glow*2),
-                    (cx - w - glow*2, cy + h + glow*2),
-                    (cx + w + glow*2, cy + h + glow*2)
-                ]
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'pentagon':
-                points = []
-                for i in range(5):
-                    angle = math.radians(i * 72 - 90)
-                    px = cx + (w + glow*2) * math.cos(angle)
-                    py = cy + (h + glow*2) * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'hexagon':
-                points = []
-                for i in range(6):
-                    angle = math.radians(i * 60)
-                    px = cx + (w + glow*2) * math.cos(angle)
-                    py = cy + (h + glow*2) * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'octagon':
-                points = []
-                for i in range(8):
-                    angle = math.radians(i * 45)
-                    px = cx + (w + glow*2) * math.cos(angle)
-                    py = cy + (h + glow*2) * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'star4':
-                # 4-point star
-                points = []
-                for i in range(8):
-                    angle = math.radians(i * 45 - 90)
-                    if i % 2 == 0:
-                        px = cx + (w + glow*2) * math.cos(angle)
-                        py = cy + (h + glow*2) * math.sin(angle)
-                    else:
-                        px = cx + (w + glow*2) * 0.4 * math.cos(angle)
-                        py = cy + (h + glow*2) * 0.4 * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'star6':
-                # 6-point star
-                points = []
-                for i in range(12):
-                    angle = math.radians(i * 30)
-                    if i % 2 == 0:
-                        px = cx + (w + glow*2) * math.cos(angle)
-                        py = cy + (h + glow*2) * math.sin(angle)
-                    else:
-                        px = cx + (w + glow*2) * 0.4 * math.cos(angle)
-                        py = cy + (h + glow*2) * 0.4 * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'star':
-                # 5-point star
-                points = []
-                for i in range(10):
-                    angle = math.radians(i * 36 - 90)
-                    if i % 2 == 0:
-                        px = cx + (w + glow*2) * math.cos(angle)
-                        py = cy + (h + glow*2) * math.sin(angle)
-                    else:
-                        px = cx + (w + glow*2) * 0.4 * math.cos(angle)
-                        py = cy + (h + glow*2) * 0.4 * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            elif shape == 'gear':
-                # Gear shape with teeth
-                points = []
-                num_teeth = 16
-                for i in range(num_teeth * 2):
-                    angle = math.radians(i * (360 / (num_teeth * 2)))
-                    if i % 2 == 0:
-                        # Outer tooth
-                        px = cx + (w + glow*2) * math.cos(angle)
-                        py = cy + (h + glow*2) * math.sin(angle)
-                    else:
-                        # Inner valley
-                        px = cx + (w + glow*2) * 0.85 * math.cos(angle)
-                        py = cy + (h + glow*2) * 0.85 * math.sin(angle)
-                    points.append((px, py))
-                draw.polygon(points, outline=glow_color, width=width + glow)
-            else:  # circle
-                draw.ellipse(
-                    [cx - w - glow*2, cy - h - glow*2, cx + w + glow*2, cy + h + glow*2],
-                    outline=glow_color, width=width + glow
-                )
+            ring_shape_instance.draw_glow(draw, cx, cy, w, h, color, width, glow, beat)
         
-        # Draw main ring (solid)
-        if shape == 'square':
-            draw.rectangle(
-                [cx - w, cy - h, cx + w, cy + h],
-                outline=(*color, 255), width=width
-            )
-        elif shape == 'triangle':
-            points = [
-                (cx, cy - h),
-                (cx - w, cy + h),
-                (cx + w, cy + h)
-            ]
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'pentagon':
-            points = []
-            for i in range(5):
-                angle = math.radians(i * 72 - 90)
-                px = cx + w * math.cos(angle)
-                py = cy + h * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'hexagon':
-            points = []
-            for i in range(6):
-                angle = math.radians(i * 60)
-                px = cx + w * math.cos(angle)
-                py = cy + h * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'octagon':
-            points = []
-            for i in range(8):
-                angle = math.radians(i * 45)
-                px = cx + w * math.cos(angle)
-                py = cy + h * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'star4':
-            # 4-point star
-            points = []
-            for i in range(8):
-                angle = math.radians(i * 45 - 90)
-                if i % 2 == 0:
-                    px = cx + w * math.cos(angle)
-                    py = cy + h * math.sin(angle)
-                else:
-                    px = cx + w * 0.4 * math.cos(angle)
-                    py = cy + h * 0.4 * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'star6':
-            # 6-point star
-            points = []
-            for i in range(12):
-                angle = math.radians(i * 30)
-                if i % 2 == 0:
-                    px = cx + w * math.cos(angle)
-                    py = cy + h * math.sin(angle)
-                else:
-                    px = cx + w * 0.4 * math.cos(angle)
-                    py = cy + h * 0.4 * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'star':
-            # 5-point star
-            points = []
-            for i in range(10):
-                angle = math.radians(i * 36 - 90)
-                if i % 2 == 0:
-                    px = cx + w * math.cos(angle)
-                    py = cy + h * math.sin(angle)
-                else:
-                    px = cx + w * 0.4 * math.cos(angle)
-                    py = cy + h * 0.4 * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        elif shape == 'gear':
-            # Gear shape with teeth
-            points = []
-            num_teeth = 16
-            for i in range(num_teeth * 2):
-                angle = math.radians(i * (360 / (num_teeth * 2)))
-                if i % 2 == 0:
-                    # Outer tooth
-                    px = cx + w * math.cos(angle)
-                    py = cy + h * math.sin(angle)
-                else:
-                    # Inner valley
-                    px = cx + w * 0.85 * math.cos(angle)
-                    py = cy + h * 0.85 * math.sin(angle)
-                points.append((px, py))
-            draw.polygon(points, outline=(*color, 255), width=width)
-        else:  # circle
-            draw.ellipse(
-                [cx - w, cy - h, cx + w, cy + h],
-                outline=(*color, 255), width=width
-            )
+        # Draw main ring outline
+        ring_shape_instance.draw_outline(draw, cx, cy, w, h, color, width)
     
     def draw_text_overlay(self, img, text, text2, beat_intensity, volume_intensity, 
                          text_fade_history, cover_image, base_size, text_size=1.0,

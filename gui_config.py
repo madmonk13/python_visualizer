@@ -23,12 +23,20 @@ PALETTE_OPTIONS = (
     'Synthwave', 'Water', 'Winter'
 )
 
-# Ring shape options with display names
-RING_SHAPE_OPTIONS = (
-    'Circle', 'Triangle', 'Square', 'Pentagon', 
-    'Hexagon', 'Octagon', '4 Point Star', '6 Point Star', 
-    '5 Point Star', 'Gear'
-)
+# Ring shape options - dynamically loaded from rings/ directory
+def get_ring_shape_options():
+    """Get ring shape options dynamically from the rings package"""
+    try:
+        import rings
+        display_names = rings.get_ring_display_names()
+        return tuple([name for name, _ in display_names])
+    except Exception as e:
+        print(f"Warning: Could not load ring shapes dynamically: {e}")
+        # Fallback to defaults
+        return ('Circle', 'Square', 'Triangle')
+
+# For backward compatibility, provide a default
+RING_SHAPE_OPTIONS = get_ring_shape_options()
 
 # Rotation options for dropdowns
 WAVEFORM_ROTATION_OPTIONS = (

@@ -1,6 +1,7 @@
 """
 GUI Controls Panel
 Creates and manages the left control panel with all settings
+Uses dynamic ring shape loading from rings/ directory
 """
 
 import tkinter as tk
@@ -322,7 +323,7 @@ class ControlsPanel:
                                           lambda *args: self.ring_speed_label.config(
                                               text=f"{int(self.ring_rot_speed_var.get() * 100)}%"))
         
-        # Ring shape
+        # Ring shape - now dynamically loaded
         ttk.Label(section, text="Ring Shape:").grid(row=5, column=0, sticky=tk.W, pady=(10, 2))
         ring_shape_combo = ttk.Combobox(section, textvariable=self.ring_shape_var, 
                                        state="readonly", width=18)
@@ -485,20 +486,19 @@ class ControlsPanel:
         return display_name.lower()
     
     def get_ring_shape_value(self, display_name):
-        """Convert display name to internal ring shape value"""
-        shape_map = {
-            'Circle': 'circle',
-            'Triangle': 'triangle',
-            'Square': 'square',
-            'Pentagon': 'pentagon',
-            'Hexagon': 'hexagon',
-            'Octagon': 'octagon',
-            '4 Point Star': 'star4',
-            '6 Point Star': 'star6',
-            '5 Point Star': 'star',
-            'Gear': 'gear'
-        }
-        return shape_map.get(display_name, 'circle')
+        """Convert display name to internal ring shape value - uses dynamic lookup"""
+        try:
+            import rings
+            display_names = rings.get_ring_display_names()
+            # Find the internal name that matches this display name
+            for disp_name, internal_name in display_names:
+                if disp_name == display_name:
+                    return internal_name
+        except Exception as e:
+            print(f"Warning: Could not look up ring shape: {e}")
+        
+        # Fallback to lowercase conversion
+        return display_name.lower().replace(' ', '').replace('-', '')
     
     def get_settings(self):
         """Return all current settings as a dictionary"""
