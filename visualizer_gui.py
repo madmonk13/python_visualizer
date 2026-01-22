@@ -21,7 +21,7 @@ try:
         WINDOW_TITLE, WINDOW_SIZE, AUDIO_FILETYPES, 
         IMAGE_FILETYPES, VIDEO_FILETYPES, MSG_NO_COVER_SELECTED
     )
-    from gui_controls import ControlsPanel
+    from gui_controls_panel import ControlsPanel
     from gui_preview import PreviewPanel
     from gui_renderer import RenderManager
 except ImportError as e:

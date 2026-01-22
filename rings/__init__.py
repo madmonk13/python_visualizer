@@ -11,11 +11,12 @@ from rings.base_ring import BaseRing
 
 # Global registry of ring shapes
 _ring_registry = {}
+_display_name_to_internal = {}
 
 
 def _discover_ring_shapes():
     """Auto-discover all ring shape classes in the rings directory"""
-    global _ring_registry
+    global _ring_registry, _display_name_to_internal
     
     # Get the directory where this __init__.py file is located
     rings_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,9 +36,11 @@ def _discover_ring_shapes():
                         # Instantiate the ring shape
                         ring_instance = obj()
                         internal_name = ring_instance.get_internal_name()
+                        display_name = ring_instance.get_name()
                         
                         # Register it
                         _ring_registry[internal_name] = ring_instance
+                        _display_name_to_internal[display_name] = internal_name
                         
             except Exception as e:
                 print(f"Warning: Could not load ring shape from {filename}: {e}")
@@ -95,6 +98,34 @@ def get_ring_display_names():
     name_pairs.sort(key=lambda x: x[0])
     
     return name_pairs
+
+
+def get_shape_code_from_display_name(display_name):
+    """
+    Convert a display name to its internal shape code
+    
+    Parameters:
+    -----------
+    display_name : str
+        The display name shown in the GUI (e.g., "4-Point Star")
+    
+    Returns:
+    --------
+    str : The internal shape code (e.g., "star4")
+    """
+    if not _display_name_to_internal:
+        _discover_ring_shapes()
+    
+    # Direct lookup
+    internal_name = _display_name_to_internal.get(display_name)
+    
+    if internal_name:
+        return internal_name
+    
+    # If not found, return 'circle' as default
+    print(f"Warning: Ring shape '{display_name}' not found, defaulting to 'circle'")
+    print(f"Available shapes: {list(_display_name_to_internal.keys())}")
+    return 'circle'
 
 
 # Auto-discover on import
