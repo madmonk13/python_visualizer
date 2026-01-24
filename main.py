@@ -70,12 +70,19 @@ Rotation Options:
                        choices=['none', 'cw', 'ccw'],
                        help='Waveform rotation (default: none)')
     
+    parser.add_argument('--waveform-rotation-speed', type=float, default=1.0,
+                       help='Waveform rotation speed multiplier (default: 1.0)')
+    
     parser.add_argument('--ring-rotation', default='none',
                        choices=['none', 'cw', 'ccw'],
                        help='Ring rotation (default: none)')
     
+    parser.add_argument('--ring-rotation-speed', type=float, default=1.0,
+                       help='Ring rotation speed multiplier (default: 1.0)')
+    
     parser.add_argument('--ring-shape', default='circle',
-                       choices=['circle', 'square', 'triangle', 'pentagon', 'hexagon', 'star'],
+                       choices=['circle', 'square', 'triangle', 'pentagon', 'hexagon', 
+                               'octagon', 'star', 'star4', 'star6', 'gear'],
                        help='Ring shape (default: circle)')
     
     parser.add_argument('--starfield-rotation', default='none',
@@ -98,14 +105,8 @@ Rotation Options:
     parser.add_argument('--disable-starfield', action='store_true',
                        help='Disable starfield background')
     
-    parser.add_argument('--no-ring-inner', action='store_true',
-                       help='Disable inner ring')
-    
-    parser.add_argument('--no-ring-middle', action='store_true',
-                       help='Disable middle ring')
-    
-    parser.add_argument('--no-ring-outer', action='store_true',
-                       help='Disable outer ring')
+    parser.add_argument('--ring-count', type=int, default=3,
+                       help='Number of rings (0-8, default: 3)')
     
     parser.add_argument('--static-cover', action='store_true',
                        help='Disable cover image reaction to music')
@@ -124,6 +125,17 @@ Rotation Options:
     parser.add_argument('--ring-stagger', default='none',
                        choices=['none', 'inner_catch', 'outer_catch', 'inner_lead', 'outer_lead'],
                        help='Ring rotation stagger pattern (default: none)')
+    
+    parser.add_argument('--text-size', type=float, default=1.0,
+                       help='Text size multiplier (default: 1.0)')
+    
+    parser.add_argument('--text-h-align', default='center',
+                       choices=['left', 'center', 'right'],
+                       help='Text horizontal alignment (default: center)')
+    
+    parser.add_argument('--text-v-align', default='bottom',
+                       choices=['top', 'middle', 'bottom'],
+                       help='Text vertical alignment (default: bottom)')
     
     args = parser.parse_args()
     
@@ -158,6 +170,7 @@ Rotation Options:
     print(f"  Waveform Rotation: {args.waveform_rotation}")
     print(f"  Ring Rotation: {args.ring_rotation}")
     print(f"  Ring Shape: {args.ring_shape}")
+    print(f"  Ring Count: {args.ring_count}")
     print(f"  Starfield Rotation: {args.starfield_rotation}")
     if args.preview:
         print(f"  Preview: {args.preview} seconds")
@@ -182,9 +195,14 @@ Rotation Options:
         resolution=(width, height),
         text_overlay=args.text,
         text_overlay2=args.text2,
+        text_size=args.text_size,
+        text_h_align=args.text_h_align,
+        text_v_align=args.text_v_align,
         color_palette=args.palette,
         waveform_rotation=args.waveform_rotation,
+        waveform_rotation_speed=args.waveform_rotation_speed,
         ring_rotation=args.ring_rotation,
+        ring_rotation_speed=args.ring_rotation_speed,
         starfield_rotation=args.starfield_rotation,
         preview_seconds=args.preview,
         cover_shape=args.cover_shape,
@@ -192,9 +210,7 @@ Rotation Options:
         disable_rings=args.disable_rings,
         disable_starfield=args.disable_starfield,
         ring_shape=args.ring_shape,
-        ring_inner=not args.no_ring_inner,
-        ring_middle=not args.no_ring_middle,
-        ring_outer=not args.no_ring_outer,
+        ring_count=args.ring_count,
         ring_scale=args.ring_scale,
         waveform_orientation=args.waveform_orientation,
         static_cover=args.static_cover,

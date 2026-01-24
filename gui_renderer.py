@@ -1,6 +1,6 @@
 """
-GUI Renderer
-Handles preview generation and full video rendering in background threads
+GUI Renderer (Hardware Accelerated)
+Handles preview generation and full video rendering with GPU encoding
 """
 
 import threading
@@ -124,7 +124,7 @@ class RenderManager:
     def _display_preview(self, img):
         """Display the generated preview (called from main thread)"""
         self.preview.display_image(img)
-        self.preview.set_info("Preview Ready", "green")
+        self.preview.set_info("Preview Ready - Hardware Acceleration Enabled 🚀", "green")
         self.controls.preview_btn.config(state='normal')
     
     def _preview_error(self, error_msg):
@@ -135,7 +135,7 @@ class RenderManager:
         messagebox.showerror("Preview Error", f"Could not generate preview:\n{error_msg}")
     
     def start_render(self, output_path, preview_seconds=None):
-        """Start full video render (can optionally render just preview_seconds)"""
+        """Start full video render with hardware acceleration"""
         if self.is_rendering:
             return False
         
@@ -153,9 +153,9 @@ class RenderManager:
         
         # Generate a preview frame to show during render
         if preview_seconds:
-            self.preview.set_info(f"Rendering {preview_seconds}s preview video... 0%")
+            self.preview.set_info(f"Rendering {preview_seconds}s preview (GPU accelerated)... 0%")
         else:
-            self.preview.set_info("Rendering full video... 0%")
+            self.preview.set_info("Rendering full video (GPU accelerated)... 0%")
         
         # Start render thread - PASS preview_seconds as argument
         self.render_thread = threading.Thread(
@@ -188,13 +188,13 @@ class RenderManager:
         
         # Also update the preview info label with percentage
         self.root.after(0, lambda: self.preview.set_info(
-            f"Rendering... {progress}% complete"
+            f"Rendering with GPU... {progress}% complete"
         ))
         
         return True
     
     def _render_video_background(self, output_path, preview_seconds=None):
-        """Background thread for rendering - ACCEPTS preview_seconds parameter"""
+        """Background thread for hardware-accelerated rendering"""
         try:
             settings = self.controls.get_settings()
             
@@ -243,91 +243,94 @@ class RenderManager:
             preview_img = visualizer.render_frame(preview_frame_idx, total_frames)
             self.root.after(0, lambda: self.preview.display_image(preview_img))
             
-            # Create temporary video
-            temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-            temp_video_path = temp_video.name
-            temp_video.close()
-            
-            # Setup video writer
-            import cv2
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(temp_video_path, fourcc, visualizer.fps,
-                                 (visualizer.width, visualizer.height))
-            
-            # Render frames
-            import numpy as np
-            for frame_idx in range(total_frames):
-                if not self.update_progress(frame_idx + 1, total_frames):
-                    out.release()
-                    os.remove(temp_video_path)
-                    self.root.after(0, self._render_cancelled)
-                    return
-                
-                img = visualizer.render_frame(frame_idx, total_frames)
-                frame_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-                out.write(frame_cv)
-            
-            out.release()
-            
-            # Add audio
-            self.root.after(0, lambda: self.controls.progress_label.config(
-                text=MSG_ADDING_AUDIO))
-            self.root.after(0, lambda: self.preview.set_info("Adding audio to video..."))
-            
-            # Build FFmpeg command properly
+            # Setup FFmpeg with hardware encoding (VideoToolbox for macOS)
             ffmpeg_cmd = [
                 'ffmpeg',
-                '-i', temp_video_path,
-                '-i', settings['audio_path']
+                '-y',  # Overwrite output
+                '-f', 'rawvideo',
+                '-vcodec', 'rawvideo',
+                '-s', f'{visualizer.width}x{visualizer.height}',
+                '-pix_fmt', 'rgb24',
+                '-r', str(visualizer.fps),
+                '-i', '-',  # Read from stdin
+                '-i', settings['audio_path'],  # Audio input
+                '-c:v', 'h264_videotoolbox',  # Hardware encoder for macOS
+                '-b:v', '8M',  # Bitrate
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-shortest',
+                '-t', str(render_duration),  # Duration limit
+                output_path
             ]
             
-            # Add duration limit if rendering preview (BEFORE the codec options)
-            if preview_seconds:
-                ffmpeg_cmd.extend(['-t', str(render_duration)])
-            
-            # Add codec and output options
-            ffmpeg_cmd.extend([
-                '-c:v', 'libx264',
-                '-c:a', 'aac',
-                '-shortest',
-                '-y',
-                output_path
-            ])
-            
+            # Start FFmpeg process
             try:
-                result = subprocess.run(
+                process = subprocess.Popen(
                     ffmpeg_cmd,
-                    check=True,
-                    capture_output=True,
-                    text=True
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
                 )
-            except subprocess.CalledProcessError as e:
-                # FFmpeg failed - log the error
-                error_details = f"""
-FFmpeg Error Details:
-Command: {' '.join(ffmpeg_cmd)}
-Return code: {e.returncode}
-
-STDOUT:
-{e.stdout}
-
-STDERR:
-{e.stderr}
-"""
-                print(error_details)
+            except FileNotFoundError:
+                raise Exception("FFmpeg not found. Please install: brew install ffmpeg")
+            
+            # Render frames and pipe to FFmpeg
+            try:
+                for frame_idx in range(total_frames):
+                    if not self.update_progress(frame_idx + 1, total_frames):
+                        # Render was cancelled
+                        process.terminate()
+                        process.wait()
+                        self.root.after(0, self._render_cancelled)
+                        return
+                    
+                    img = visualizer.render_frame(frame_idx, total_frames)
+                    
+                    # Convert PIL Image to raw RGB bytes
+                    frame_bytes = img.tobytes()
+                    
+                    # Write to FFmpeg stdin
+                    process.stdin.write(frame_bytes)
                 
-                # Clean up temp file
+                # Close stdin to signal end of input
+                process.stdin.close()
+                
+                # Wait for FFmpeg to finish with timeout
+                self.root.after(0, lambda: self.controls.progress_label.config(
+                    text="Finalizing video (encoding audio)..."))
+                
                 try:
-                    os.remove(temp_video_path)
-                except:
-                    pass
-                
-                # Raise with more details
-                raise Exception(f"FFmpeg failed with code {e.returncode}.\n\nError output:\n{e.stderr}")
-            
-            os.remove(temp_video_path)
-            
-            self.root.after(0, lambda: self._render_complete(output_path))
+                    stdout, stderr = process.communicate(timeout=30)
+                    
+                    if process.returncode == 0:
+                        self.root.after(0, lambda: self._render_complete(output_path))
+                    else:
+                        stderr_output = stderr.decode('utf-8') if stderr else "No error output"
+                        error_msg = f"FFmpeg error (code {process.returncode}):\n{stderr_output[-500:]}"
+                        self.root.after(0, lambda: self._render_error(error_msg))
+                except subprocess.TimeoutExpired:
+                    # FFmpeg taking longer - wait without timeout
+                    stdout, stderr = process.communicate()
+                    if process.returncode == 0:
+                        self.root.after(0, lambda: self._render_complete(output_path))
+                    else:
+                        error_msg = "FFmpeg timeout/error"
+                        self.root.after(0, lambda: self._render_error(error_msg))
+                        
+            except BrokenPipeError:
+                # FFmpeg closed early
+                process.wait()
+                import os
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    self.root.after(0, lambda: self._render_complete(output_path))
+                else:
+                    error_msg = "FFmpeg closed unexpectedly"
+                    self.root.after(0, lambda: self._render_error(error_msg))
+                    
+            except Exception as e:
+                process.terminate()
+                process.wait()
+                raise e
             
         except Exception as error:
             error_msg = str(error)
@@ -341,7 +344,7 @@ STDERR:
         self.controls.render_btn.config(state='normal')
         self.controls.quick_render_btn.config(state='normal')
         self.controls.preview_btn.config(state='normal')
-        self.preview.set_info(MSG_RENDER_COMPLETE, "green")
+        self.preview.set_info("✅ Render Complete (Hardware Accelerated)", "green")
         
         # Hide progress UI using grid_forget
         self.controls.progress_frame.grid_forget()

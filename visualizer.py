@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Psychedelic Music Visualizer - Main Module
-Orchestrates all components to render audio-reactive video
+Psychedelic Music Visualizer - Main Module (Hardware Accelerated)
+Orchestrates all components to render audio-reactive video with GPU encoding
 """
 
 import numpy as np
@@ -13,6 +13,7 @@ import tempfile
 from tqdm import tqdm
 import math
 import copy
+import sys
 
 from config import (
     FREQUENCY_BANDS, COLOR_PALETTES, 
@@ -39,7 +40,8 @@ class MusicVisualizer:
         self.output_path = output_path
         self.cover_image_path = cover_image_path
         self.fps = fps
-        self.width, self.height = resolution
+        self.width, height = resolution
+        self.height = height
         self.text_overlay = text_overlay
         self.text_overlay2 = text_overlay2
         self.color_palette = color_palette
@@ -408,7 +410,7 @@ class MusicVisualizer:
         return img
     
     def render(self):
-        """Render the complete video with audio"""
+        """Render the complete video with audio using hardware-accelerated encoding"""
         # Calculate frames
         if self.preview_seconds:
             render_duration = min(self.preview_seconds, self.duration)
@@ -418,53 +420,73 @@ class MusicVisualizer:
             render_duration = self.duration
             total_frames = int(render_duration * self.fps)
         
-        # Create temporary video without audio
-        temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-        temp_video_path = temp_video.name
-        temp_video.close()
-        
-        # Setup video writer
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(temp_video_path, fourcc, self.fps, 
-                             (self.width, self.height))
-        
+        print(f"🚀 Hardware Acceleration: VideoToolbox (Apple Silicon)")
         print(f"Rendering {total_frames} frames at {self.fps} fps...")
         
-        for frame_idx in tqdm(range(total_frames)):
-            img = self.render_frame(frame_idx, total_frames)
-            frame_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-            out.write(frame_cv)
+        # Setup FFmpeg with hardware encoding (VideoToolbox for macOS)
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-y',  # Overwrite output
+            '-f', 'rawvideo',
+            '-vcodec', 'rawvideo',
+            '-s', f'{self.width}x{self.height}',
+            '-pix_fmt', 'rgb24',
+            '-r', str(self.fps),
+            '-i', '-',  # Read from stdin
+            '-i', self.audio_path,  # Audio input
+            '-c:v', 'h264_videotoolbox',  # Hardware encoder for macOS
+            '-b:v', '8M',  # Bitrate
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            '-t', str(render_duration),  # Duration limit
+            self.output_path
+        ]
         
-        out.release()
-        
-        # Merge video with audio
-        print("\nAdding audio to video...")
+        # Start FFmpeg process
         try:
-            ffmpeg_cmd = [
-                'ffmpeg', '-i', temp_video_path, '-i', self.audio_path,
-                '-c:v', 'libx264', '-c:a', 'aac',
-                '-shortest', '-y', self.output_path
-            ]
-            
-            if self.preview_seconds:
-                # Insert duration limit before output
-                ffmpeg_cmd.insert(-2, '-t')
-                ffmpeg_cmd.insert(-2, str(render_duration))
-            
-            result = subprocess.run(
+            process = subprocess.Popen(
                 ffmpeg_cmd,
-                check=True,
-                capture_output=True,
-                text=True
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
+        except FileNotFoundError:
+            print("ERROR: FFmpeg not found. Please install it:")
+            print("  brew install ffmpeg")
+            return
+        
+        # Render frames and pipe to FFmpeg
+        try:
+            for frame_idx in tqdm(range(total_frames)):
+                img = self.render_frame(frame_idx, total_frames)
+                
+                # Convert PIL Image to raw RGB bytes
+                frame_bytes = img.tobytes()
+                
+                # Write to FFmpeg stdin
+                process.stdin.write(frame_bytes)
             
-            os.remove(temp_video_path)
-            print(f"Video with audio saved to: {self.output_path}")
+            # Close stdin to signal end of input
+            process.stdin.close()
             
-        except subprocess.CalledProcessError as e:
-            print(f"Error adding audio:")
-            print(f"Command: {' '.join(ffmpeg_cmd)}")
-            print(f"Return code: {e.returncode}")
-            print(f"stdout: {e.stdout}")
-            print(f"stderr: {e.stderr}")
-            print(f"Video without audio saved to: {temp_video_path}")
+            # Wait for FFmpeg to finish
+            process.wait()
+            
+            if process.returncode == 0:
+                print(f"\n✅ Video saved to: {self.output_path}")
+            else:
+                stderr_output = process.stderr.read().decode('utf-8')
+                print(f"\n❌ FFmpeg error (return code {process.returncode}):")
+                print(stderr_output[-1000:])  # Last 1000 chars of error
+                
+        except KeyboardInterrupt:
+            print("\n⚠️  Render interrupted by user")
+            process.terminate()
+            process.wait()
+        except Exception as e:
+            print(f"\n❌ Error during render: {e}")
+            process.terminate()
+            process.wait()
+            import traceback
+            traceback.print_exc()
