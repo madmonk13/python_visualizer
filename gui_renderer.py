@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import tkinter as tk
+import time
 
 # Add current directory to path if needed
 if '.' not in sys.path:
@@ -37,6 +38,10 @@ class RenderManager:
         self.render_thread = None
         self.is_rendering = False
         self.cancel_render_flag = False
+        
+        # Time tracking for ETA
+        self.render_start_time = None
+        self.last_frame_time = None
     
     def generate_preview(self):
         """Start preview generation in background thread"""
@@ -141,13 +146,16 @@ class RenderManager:
         
         self.is_rendering = True
         self.cancel_render_flag = False
+        self.render_start_time = time.time()
+        self.last_frame_time = time.time()
+        
         self.controls.render_btn.config(state='disabled')
         self.controls.quick_render_btn.config(state='disabled')
         self.controls.preview_btn.config(state='disabled')
         
         # Show progress UI using grid instead of pack
-        self.controls.progress_frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
-        self.controls.cancel_btn.grid(row=4, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
+        self.controls.progress_frame.grid(row=100, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
+        self.controls.cancel_btn.grid(row=101, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
         self.controls.progress_bar['value'] = 0
         self.controls.progress_label.config(text=MSG_STARTING_RENDER)
         
@@ -174,23 +182,58 @@ class RenderManager:
             self.cancel_render_flag = True
             self.controls.progress_label.config(text=MSG_CANCELLING)
     
-    def update_progress(self, current_frame, total_frames):
-        """Update progress bar from render thread"""
+    def update_progress(self, current_frame, total_frames, visualizer=None):
+        """Update progress bar from render thread with ETA"""
         if self.cancel_render_flag:
             return False
         
         progress = int((current_frame / total_frames) * 100)
         
+        # Calculate ETA
+        current_time = time.time()
+        elapsed = current_time - self.render_start_time
+        
+        if current_frame > 0:
+            avg_time_per_frame = elapsed / current_frame
+            frames_remaining = total_frames - current_frame
+            eta_seconds = avg_time_per_frame * frames_remaining
+            
+            # Format ETA as hh:mm:ss
+            hours = int(eta_seconds // 3600)
+            minutes = int((eta_seconds % 3600) // 60)
+            seconds = int(eta_seconds % 60)
+            
+            if hours > 0:
+                eta_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                eta_str = f"{minutes:02d}:{seconds:02d}"
+            
+            # Split into two lines: progress on line 1, time on line 2
+            status_text = f"Frame {current_frame}/{total_frames} ({progress}%)\n{eta_str} remaining"
+        else:
+            status_text = f"Frame {current_frame}/{total_frames} ({progress}%)"
+        
         self.root.after(0, lambda: self.controls.progress_bar.config(value=progress))
-        self.root.after(0, lambda: self.controls.progress_label.config(
-            text=f"Rendering frame {current_frame}/{total_frames} ({progress}%)"
-        ))
+        self.root.after(0, lambda: self.controls.progress_label.config(text=status_text))
         
         # Also update the preview info label with percentage
         self.root.after(0, lambda: self.preview.set_info(
             f"Rendering with GPU... {progress}% complete"
         ))
         
+        # Update live preview if enabled and visualizer provided
+        if self.controls.live_preview_var.get() and visualizer is not None:
+            # Update every N frames based on FPS
+            fps = self.controls.fps_var.get()
+            if current_frame % fps == 0:
+                try:
+                    # Render current frame for preview
+                    preview_img = visualizer.render_frame(current_frame - 1, total_frames)
+                    self.root.after(0, lambda img=preview_img: self.preview.display_image(img))
+                except Exception as e:
+                    print(f"Error updating live preview: {e}")
+        
+        self.last_frame_time = current_time
         return True
     
     def _render_video_background(self, output_path, preview_seconds=None):
@@ -277,10 +320,18 @@ class RenderManager:
             # Render frames and pipe to FFmpeg
             try:
                 for frame_idx in range(total_frames):
-                    if not self.update_progress(frame_idx + 1, total_frames):
+                    if not self.update_progress(frame_idx + 1, total_frames, visualizer):
                         # Render was cancelled
+                        try:
+                            process.stdin.close()
+                        except:
+                            pass
                         process.terminate()
-                        process.wait()
+                        try:
+                            process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
                         self.root.after(0, self._render_cancelled)
                         return
                     
@@ -290,10 +341,18 @@ class RenderManager:
                     frame_bytes = img.tobytes()
                     
                     # Write to FFmpeg stdin
-                    process.stdin.write(frame_bytes)
+                    try:
+                        process.stdin.write(frame_bytes)
+                    except (BrokenPipeError, OSError):
+                        # FFmpeg died, treat as cancelled
+                        self.root.after(0, self._render_cancelled)
+                        return
                 
                 # Close stdin to signal end of input
-                process.stdin.close()
+                try:
+                    process.stdin.close()
+                except:
+                    pass
                 
                 # Wait for FFmpeg to finish with timeout
                 self.root.after(0, lambda: self.controls.progress_label.config(
@@ -318,8 +377,19 @@ class RenderManager:
                         self.root.after(0, lambda: self._render_error(error_msg))
                         
             except BrokenPipeError:
-                # FFmpeg closed early
-                process.wait()
+                # FFmpeg closed early - might be cancelled or error
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                
+                # Check if it was a cancellation
+                if self.cancel_render_flag:
+                    self.root.after(0, self._render_cancelled)
+                    return
+                
+                # Otherwise check if file exists and has content
                 import os
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     self.root.after(0, lambda: self._render_complete(output_path))
@@ -328,8 +398,22 @@ class RenderManager:
                     self.root.after(0, lambda: self._render_error(error_msg))
                     
             except Exception as e:
+                try:
+                    process.stdin.close()
+                except:
+                    pass
                 process.terminate()
-                process.wait()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                
+                # Check if it was a cancellation
+                if self.cancel_render_flag:
+                    self.root.after(0, self._render_cancelled)
+                    return
+                
                 raise e
             
         except Exception as error:

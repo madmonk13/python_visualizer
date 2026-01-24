@@ -1,59 +1,75 @@
 """
-GUI Controls - Action Buttons Section
+GUI Controls - Actions Section
+Creates action buttons and live preview checkbox
 """
 
 import tkinter as tk
 from tkinter import ttk
+from gui_config import *
 
 
-def create_section(parent, row, controls_panel):
-    """Create the Action Buttons section"""
-    print(f"DEBUG: actions.create_section() called at row {row}")
-    print(f"DEBUG: parent = {parent}")
-    print(f"DEBUG: controls_panel = {controls_panel}")
+def create_section(parent, row, panel):
+    """Create the actions section with buttons and live preview checkbox"""
     
-    # Check if buttons already exist
-    if hasattr(controls_panel, 'preview_btn'):
-        print(f"DEBUG: WARNING - preview_btn already exists!")
-        return  # Don't create buttons again
+    # Update Preview button
+    panel.preview_btn = ttk.Button(
+        parent,
+        text="Update Preview",
+        command=panel.callback.update_preview
+    )
+    panel.preview_btn.grid(row=row, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
     
-    button_frame = ttk.Frame(parent)
-    button_frame.grid(row=row, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
-    button_frame.columnconfigure(0, weight=1)
+    # Render 30s Preview button
+    panel.quick_render_btn = ttk.Button(
+        parent,
+        text="Render 30s Preview",
+        command=panel.callback.render_quick_preview
+    )
+    panel.quick_render_btn.grid(row=row+1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
     
-    print(f"DEBUG: Creating Update Preview button")
-    # Update Preview
-    controls_panel.preview_btn = ttk.Button(button_frame, text="Update Preview", 
-                                  command=controls_panel.callback.update_preview)
-    controls_panel.preview_btn.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+    # Render Full Video button
+    panel.render_btn = ttk.Button(
+        parent,
+        text="Render Full Video",
+        command=panel.callback.render_video
+    )
+    panel.render_btn.grid(row=row+2, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
     
-    print(f"DEBUG: Creating Render 30s button")
-    # Render 30s Preview Video
-    controls_panel.quick_render_btn = ttk.Button(button_frame, text="Render 30s Preview Video", 
-                                       command=controls_panel.callback.render_quick_preview)
-    controls_panel.quick_render_btn.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+    # Live Preview Checkbox (can be toggled during render)
+    panel.live_preview_var = tk.BooleanVar(value=False)
+    panel.live_preview_check = ttk.Checkbutton(
+        parent,
+        text="Live preview during render",
+        variable=panel.live_preview_var
+    )
+    panel.live_preview_check.grid(row=row+3, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
     
-    print(f"DEBUG: Creating Render Full button")
-    # Render Full Video
-    controls_panel.render_btn = ttk.Button(button_frame, text="Render Full Video", 
-                                 command=controls_panel.callback.render_video)
-    controls_panel.render_btn.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+    # Progress section (hidden initially)
+    panel.progress_frame = ttk.Frame(parent)
+    panel.progress_frame.columnconfigure(0, weight=1)
     
-    # Progress section (hidden by default) - DON'T grid it yet
-    controls_panel.progress_frame = ttk.Frame(button_frame)
-    controls_panel.progress_frame.columnconfigure(0, weight=1)
-    controls_panel.progress_label = ttk.Label(controls_panel.progress_frame, text="", 
-                                   font=('TkDefaultFont', 9))
-    controls_panel.progress_label.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 2))
-    controls_panel.progress_bar = ttk.Progressbar(controls_panel.progress_frame, 
-                                       mode='determinate', 
-                                       maximum=100)
-    controls_panel.progress_bar.grid(row=1, column=0, sticky=(tk.W, tk.E))
+    panel.progress_bar = ttk.Progressbar(
+        panel.progress_frame, 
+        mode='determinate', 
+        maximum=100,
+        length=250
+    )
+    panel.progress_bar.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=2)
     
-    # Cancel button (also hidden by default) - DON'T grid it yet
-    controls_panel.cancel_btn = ttk.Button(button_frame, text="Cancel Render", 
-                                 command=controls_panel.callback.cancel_render)
+    panel.progress_label = ttk.Label(
+        panel.progress_frame, 
+        text="",
+        wraplength=250,
+        justify=tk.LEFT
+    )
+    panel.progress_label.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(2, 0))
     
-    print(f"DEBUG: Finished creating action buttons")
+    # Cancel button (hidden initially)
+    panel.cancel_btn = ttk.Button(
+        parent,
+        text="Cancel Render",
+        command=panel.callback.cancel_render
+    )
     
-    return button_frame
+    # Note: progress_frame and cancel_btn are created but not grid()ed initially
+    # They will be shown/hidden by the RenderManager using grid()/grid_forget()
