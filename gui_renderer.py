@@ -92,6 +92,7 @@ class RenderManager:
                 ring_rotation=settings['ring_rotation'],
                 ring_rotation_speed=settings.get('ring_rotation_speed', 1.0),
                 starfield_rotation=settings['starfield_rotation'],
+                starfield_direction=settings.get('starfield_direction', 'outward'),
                 preview_seconds=None,
                 cover_shape=settings['cover_shape'],
                 cover_size=settings['cover_size'],
@@ -259,6 +260,7 @@ class RenderManager:
                 ring_rotation=settings['ring_rotation'],
                 ring_rotation_speed=settings.get('ring_rotation_speed', 1.0),
                 starfield_rotation=settings['starfield_rotation'],
+                starfield_direction=settings.get('starfield_direction', 'outward'),
                 preview_seconds=preview_seconds,
                 cover_shape=settings['cover_shape'],
                 cover_size=settings['cover_size'],
@@ -349,35 +351,44 @@ class RenderManager:
                         return
                 
                 # Close stdin to signal end of input
-                try:
-                    process.stdin.close()
-                except:
-                    pass
+                process.stdin.close()
                 
-                # Wait for FFmpeg to finish with timeout
+                # Wait for FFmpeg to finish
                 self.root.after(0, lambda: self.controls.progress_label.config(
-                    text="Finalizing video (encoding audio)..."))
+                    text="Finalizing video...\n(encoding audio)"))
                 
-                try:
-                    stdout, stderr = process.communicate(timeout=30)
-                    
-                    if process.returncode == 0:
-                        self.root.after(0, lambda: self._render_complete(output_path))
-                    else:
-                        stderr_output = stderr.decode('utf-8') if stderr else "No error output"
-                        error_msg = f"FFmpeg error (code {process.returncode}):\n{stderr_output[-500:]}"
-                        self.root.after(0, lambda: self._render_error(error_msg))
-                except subprocess.TimeoutExpired:
-                    # FFmpeg taking longer - wait without timeout
-                    stdout, stderr = process.communicate()
-                    if process.returncode == 0:
-                        self.root.after(0, lambda: self._render_complete(output_path))
-                    else:
-                        error_msg = "FFmpeg timeout/error"
-                        self.root.after(0, lambda: self._render_error(error_msg))
+                # Poll for completion instead of communicate() since stdin is closed
+                import time
+                timeout = 30
+                start_time = time.time()
+                
+                while process.poll() is None:
+                    if time.time() - start_time > timeout:
+                        # Timeout - try one more time without limit
+                        process.wait()
+                        break
+                    time.sleep(0.1)
+                
+                # Check result
+                if process.returncode == 0:
+                    self.root.after(0, lambda: self._render_complete(output_path))
+                else:
+                    # Read any error output
+                    try:
+                        stderr_output = process.stderr.read().decode('utf-8') if process.stderr else "No error output"
+                    except:
+                        stderr_output = "Could not read error output"
+                    error_msg = f"FFmpeg error (code {process.returncode}):\n{stderr_output[-500:]}"
+                    self.root.after(0, lambda: self._render_error(error_msg))
                         
             except BrokenPipeError:
                 # FFmpeg closed early - might be cancelled or error
+                if process.stdin and not process.stdin.closed:
+                    try:
+                        process.stdin.close()
+                    except:
+                        pass
+                
                 try:
                     process.wait(timeout=1)
                 except subprocess.TimeoutExpired:
@@ -398,10 +409,12 @@ class RenderManager:
                     self.root.after(0, lambda: self._render_error(error_msg))
                     
             except Exception as e:
-                try:
-                    process.stdin.close()
-                except:
-                    pass
+                if process.stdin and not process.stdin.closed:
+                    try:
+                        process.stdin.close()
+                    except:
+                        pass
+                
                 process.terminate()
                 try:
                     process.wait(timeout=2)

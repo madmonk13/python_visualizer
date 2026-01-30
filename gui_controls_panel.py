@@ -51,6 +51,9 @@ class ControlsPanel:
         self.audio_path = None
         self.cover_path = None
         
+        # Live preview toggle (will be created by actions section)
+        self.live_preview_var = None
+        
         # Visual settings
         self.palette_var = tk.StringVar(value=DEFAULT_PALETTE)
         self.cover_shape_var = tk.StringVar(value=DEFAULT_COVER_SHAPE)
@@ -63,6 +66,7 @@ class ControlsPanel:
         self.ring_rot_speed_var = tk.DoubleVar(value=DEFAULT_ROTATION_SPEED)
         self.ring_shape_var = tk.StringVar(value=DEFAULT_RING_SHAPE)
         self.starfield_rot_var = tk.StringVar(value=DEFAULT_STARFIELD_ROTATION)
+        self.starfield_direction_var = tk.StringVar(value=DEFAULT_STARFIELD_DIRECTION)
         
         # Waveform orientation
         self.waveform_orientation_var = tk.StringVar(value=DEFAULT_WAVEFORM_ORIENTATION)
@@ -192,6 +196,10 @@ class ControlsPanel:
         """Extract stagger mode from combo box value"""
         return combo_value.split(' - ')[0]
     
+    def get_starfield_direction_value(self, combo_value):
+        """Extract starfield direction from combo box value"""
+        return combo_value.split(' - ')[0]
+    
     def get_palette_value(self, display_name):
         """Convert display name to internal palette name"""
         return display_name.lower()
@@ -254,6 +262,7 @@ class ControlsPanel:
             'ring_rotation': self.get_rotation_value(self.ring_rot_var.get()),
             'ring_rotation_speed': self.ring_rot_speed_var.get(),
             'starfield_rotation': self.get_rotation_value(self.starfield_rot_var.get()),
+            'starfield_direction': self.get_starfield_direction_value(self.starfield_direction_var.get()),
             'cover_shape': self.cover_shape_var.get(),
             'cover_size': self.cover_size_var.get(),
             'disable_rings': not self.rings_enabled_var.get(),

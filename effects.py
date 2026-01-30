@@ -26,9 +26,9 @@ class EffectsRenderer:
         """Convenience method for color conversion"""
         return WaveformRenderer.hsv_to_rgb(h, s, v)
     
-    def update_starfield(self, volume_intensity, rotation_mode='none'):
+    def update_starfield(self, volume_intensity, rotation_mode='none', direction='outward'):
         """Update starfield particle positions"""
-        self.starfield.update(volume_intensity, rotation_mode)
+        self.starfield.update(volume_intensity, rotation_mode, direction)
     
     def draw_starfield(self, img, volume_intensity):
         """Draw the starfield effect"""

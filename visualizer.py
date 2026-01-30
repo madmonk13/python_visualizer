@@ -28,9 +28,9 @@ class MusicVisualizer:
     def __init__(self, audio_path, output_path='output.mp4', cover_image_path=None, 
                  fps=30, resolution=(1280, 720), text_overlay=None, text_overlay2=None,
                  color_palette='rainbow', waveform_rotation='none', ring_rotation='none', 
-                 starfield_rotation='none', preview_seconds=None, cover_shape='square', 
-                 cover_size=1.0, disable_rings=False, disable_starfield=False, 
-                 ring_shape='circle', ring_count=3, ring_scale=1.0, 
+                 starfield_rotation='none', starfield_direction='outward', preview_seconds=None,
+                 cover_shape='square', cover_size=1.0, disable_rings=False, 
+                 disable_starfield=False, ring_shape='circle', ring_count=3, ring_scale=1.0, 
                  waveform_orientation='horizontal', static_cover=False,
                  cover_timeline='none', ring_stagger='none', waveform_rotation_speed=1.0,
                  ring_rotation_speed=1.0, text_size=1.0, text_h_align='center', 
@@ -50,6 +50,7 @@ class MusicVisualizer:
         self.ring_rotation = ring_rotation
         self.ring_rotation_speed = ring_rotation_speed
         self.starfield_rotation = starfield_rotation
+        self.starfield_direction = starfield_direction
         self.preview_seconds = preview_seconds
         self.is_preview = preview_seconds is not None
         self.cover_shape = cover_shape
@@ -285,9 +286,9 @@ class MusicVisualizer:
         # Start with faded trail
         img = self.trail_buffer.copy()
         
-        # Draw starfield (behind everything)
+        # Draw starfield (behind everything) - NOW WITH DIRECTION
         if not self.disable_starfield:
-            self.effects_renderer.update_starfield(volume_intensity, self.starfield_rotation)
+            self.effects_renderer.update_starfield(volume_intensity, self.starfield_rotation, self.starfield_direction)
             self.effects_renderer.draw_starfield(img, volume_intensity)
         
         # Create separate canvas for waveforms

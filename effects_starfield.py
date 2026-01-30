@@ -27,10 +27,13 @@ class StarfieldEffect:
                 'size': np.random.randint(1, 4)
             })
     
-    def update(self, volume_intensity, rotation_mode='none'):
-        """Update starfield positions based on volume and rotation settings"""
+    def update(self, volume_intensity, rotation_mode='none', direction='outward'):
+        """Update starfield positions based on volume, rotation, and direction"""
         speed = 0.5 + volume_intensity * 5.5
         center_x, center_y = self.width / 2, self.height / 2
+        
+        # Direction multiplier: 1 for outward, -1 for inward
+        direction_multiplier = 1 if direction == 'outward' else -1
         
         for star in self.stars:
             # Apply rotation if enabled
@@ -47,21 +50,42 @@ class StarfieldEffect:
                 star['x'] = center_x + distance * math.cos(angle)
                 star['y'] = center_y + distance * math.sin(angle)
             
-            # Move stars outward from center
+            # Move stars based on direction
             dx = star['x'] - center_x
             dy = star['y'] - center_y
             
             distance = math.sqrt(dx*dx + dy*dy)
             if distance > 0:
-                star['x'] += (dx / distance) * speed * star['z']
-                star['y'] += (dy / distance) * speed * star['z']
+                # Apply direction multiplier
+                star['x'] += (dx / distance) * speed * star['z'] * direction_multiplier
+                star['y'] += (dy / distance) * speed * star['z'] * direction_multiplier
             
-            # Wrap around edges
-            if (star['x'] < 0 or star['x'] > self.width or 
-                star['y'] < 0 or star['y'] > self.height):
-                star['x'] = center_x + np.random.randn() * 50
-                star['y'] = center_y + np.random.randn() * 50
-                star['z'] = np.random.rand() * 2
+            # Wrap around edges (different logic for inward vs outward)
+            if direction == 'outward':
+                # For outward: respawn at center when leaving edges
+                if (star['x'] < 0 or star['x'] > self.width or 
+                    star['y'] < 0 or star['y'] > self.height):
+                    star['x'] = center_x + np.random.randn() * 50
+                    star['y'] = center_y + np.random.randn() * 50
+                    star['z'] = np.random.rand() * 2
+            else:
+                # For inward: respawn at edges when reaching center
+                if distance < 50:  # Close to center
+                    # Spawn at random edge
+                    edge = np.random.randint(0, 4)
+                    if edge == 0:  # Top
+                        star['x'] = np.random.rand() * self.width
+                        star['y'] = 0
+                    elif edge == 1:  # Right
+                        star['x'] = self.width
+                        star['y'] = np.random.rand() * self.height
+                    elif edge == 2:  # Bottom
+                        star['x'] = np.random.rand() * self.width
+                        star['y'] = self.height
+                    else:  # Left
+                        star['x'] = 0
+                        star['y'] = np.random.rand() * self.height
+                    star['z'] = np.random.rand() * 2
     
     def draw(self, img, volume_intensity):
         """Draw the starfield with white stars"""

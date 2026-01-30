@@ -52,9 +52,15 @@ RING_ROTATION_OPTIONS = (
 )
 
 STARFIELD_ROTATION_OPTIONS = (
-    'none - Outward Only',
+    'none - No Spiral',
     'cw - Clockwise Spiral',
-    'ccw - Counter-Clockwise'
+    'ccw - Counter-Clockwise Spiral'
+)
+
+# Starfield direction options
+STARFIELD_DIRECTION_OPTIONS = (
+    'outward - Expanding',
+    'inward - Contracting'
 )
 
 # Cover timeline animation options
@@ -119,6 +125,7 @@ DEFAULT_WAVEFORM_ROTATION = "none"
 DEFAULT_RING_ROTATION = "none"
 DEFAULT_RING_SHAPE = "Circle"
 DEFAULT_STARFIELD_ROTATION = "none"
+DEFAULT_STARFIELD_DIRECTION = "outward"
 DEFAULT_RESOLUTION = "1280x720"
 DEFAULT_FPS = 30
 DEFAULT_STATIC_COVER = False

@@ -25,6 +25,9 @@ Examples:
   
   Quick 30-second preview (10-15x faster):
     python main.py song.mp3 --preview 30 -c cover.jpg -t "Test"
+  
+  Inward contracting starfield:
+    python main.py song.mp3 --starfield-direction inward
 
 Color Palettes:
   rainbow, spring, summer, autumn, winter, ice, fire, water, earth
@@ -32,7 +35,10 @@ Color Palettes:
 Rotation Options:
   Waveform: none, cw (clockwise), ccw (counter-clockwise)
   Ring: none, cw (clockwise), ccw (counter-clockwise)
-  Starfield: none (outward only), cw (clockwise), ccw (counter-clockwise)
+  Starfield: none (no spiral), cw (clockwise), ccw (counter-clockwise)
+
+Starfield Direction:
+  outward (expanding from center), inward (contracting to center)
         """)
     
     parser.add_argument('audio', help='Path to audio file (mp3, wav, etc.)')
@@ -88,6 +94,10 @@ Rotation Options:
     parser.add_argument('--starfield-rotation', default='none',
                        choices=['none', 'cw', 'ccw'],
                        help='Starfield rotation (default: none)')
+    
+    parser.add_argument('--starfield-direction', default='outward',
+                       choices=['outward', 'inward'],
+                       help='Starfield direction: outward (expanding) or inward (contracting) (default: outward)')
     
     parser.add_argument('--preview', type=int, metavar='SECONDS',
                        help='Preview mode: render only first N seconds')
@@ -172,6 +182,7 @@ Rotation Options:
     print(f"  Ring Shape: {args.ring_shape}")
     print(f"  Ring Count: {args.ring_count}")
     print(f"  Starfield Rotation: {args.starfield_rotation}")
+    print(f"  Starfield Direction: {args.starfield_direction}")
     if args.preview:
         print(f"  Preview: {args.preview} seconds")
     if args.cover:
@@ -204,6 +215,7 @@ Rotation Options:
         ring_rotation=args.ring_rotation,
         ring_rotation_speed=args.ring_rotation_speed,
         starfield_rotation=args.starfield_rotation,
+        starfield_direction=args.starfield_direction,
         preview_seconds=args.preview,
         cover_shape=args.cover_shape,
         cover_size=args.cover_size,
