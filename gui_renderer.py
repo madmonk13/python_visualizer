@@ -353,31 +353,22 @@ class RenderManager:
                 # Close stdin to signal end of input
                 process.stdin.close()
                 
-                # Wait for FFmpeg to finish
+                # Wait for FFmpeg to finish encoding
                 self.root.after(0, lambda: self.controls.progress_label.config(
                     text="Finalizing video...\n(encoding audio)"))
                 
-                # Poll for completion instead of communicate() since stdin is closed
-                import time
-                timeout = 30
-                start_time = time.time()
+                # Wait for process to complete - no timeout, FFmpeg needs time to finalize
+                process.wait()
                 
-                while process.poll() is None:
-                    if time.time() - start_time > timeout:
-                        # Timeout - try one more time without limit
-                        process.wait()
-                        break
-                    time.sleep(0.1)
+                # Read stderr for any error info
+                try:
+                    stderr_output = process.stderr.read().decode('utf-8') if process.stderr else ""
+                except:
+                    stderr_output = ""
                 
-                # Check result
                 if process.returncode == 0:
                     self.root.after(0, lambda: self._render_complete(output_path))
                 else:
-                    # Read any error output
-                    try:
-                        stderr_output = process.stderr.read().decode('utf-8') if process.stderr else "No error output"
-                    except:
-                        stderr_output = "Could not read error output"
                     error_msg = f"FFmpeg error (code {process.returncode}):\n{stderr_output[-500:]}"
                     self.root.after(0, lambda: self._render_error(error_msg))
                         
@@ -389,19 +380,12 @@ class RenderManager:
                     except:
                         pass
                 
-                try:
-                    process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                process.wait()
                 
-                # Check if it was a cancellation
                 if self.cancel_render_flag:
                     self.root.after(0, self._render_cancelled)
                     return
                 
-                # Otherwise check if file exists and has content
-                import os
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     self.root.after(0, lambda: self._render_complete(output_path))
                 else:
@@ -416,13 +400,8 @@ class RenderManager:
                         pass
                 
                 process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                process.wait()
                 
-                # Check if it was a cancellation
                 if self.cancel_render_flag:
                     self.root.after(0, self._render_cancelled)
                     return
@@ -433,8 +412,7 @@ class RenderManager:
             error_msg = str(error)
             import traceback
             traceback.print_exc()
-            self.root.after(0, lambda: self._render_error(error_msg))
-    
+            self.root.after(0, lambda: self._render_error(error_msg))    
     def _render_complete(self, output_path):
         """Handle successful render"""
         self.is_rendering = False
