@@ -122,7 +122,6 @@ class MusicVisualizer:
     
     def _calculate_rotation_speeds(self):
         """Calculate rotation speeds that complete whole rotations over song duration"""
-        # Get total number of frames (accounting for preview mode)
         if self.preview_seconds:
             total_duration = min(self.preview_seconds, self.duration)
         else:
@@ -130,15 +129,11 @@ class MusicVisualizer:
         
         total_frames = int(total_duration * self.fps)
         
-        # Calculate how many rotations look good based on duration
         # Roughly 1 rotation per 3 minutes
         target_rotations = max(1, round(total_duration / 180))
         
-        # Calculate the exact speed needed for whole rotations
         total_radians_needed = target_rotations * 2 * math.pi
         self.base_rotation_speed = total_radians_needed / total_frames
-        
-        # Volume multiplier should be small enough that it doesn't break the sync
         self.volume_rotation_multiplier = self.base_rotation_speed * 5
         
         print(f"Rotation sync: {target_rotations} rotation(s) over {total_duration:.1f}s")
@@ -158,65 +153,43 @@ class MusicVisualizer:
         # Timeline: 0-25% visible, 25-37.5% remove, 37.5-62.5% hidden, 62.5-75% return, 75-100% visible
         
         if progress < 0.25:
-            # First quarter: visible
             return (True, 1.0, 0, 0, 1.0)
         
         elif progress < 0.375:
-            # Remove action (12.5% duration)
             transition_progress = (progress - 0.25) / 0.125
             
             if self.cover_timeline == 'fade':
-                alpha = 1.0 - transition_progress
-                return (True, 1.0, 0, 0, alpha)
-            
+                return (True, 1.0, 0, 0, 1.0 - transition_progress)
             elif self.cover_timeline == 'zoom':
-                scale = 1.0 - transition_progress
-                alpha = 1.0 - transition_progress
-                return (True, scale, 0, 0, alpha)
-            
+                s = 1.0 - transition_progress
+                return (True, s, 0, 0, s)
             elif self.cover_timeline == 'slide_up':
-                offset_y = -int(transition_progress * self.height)
-                return (True, 1.0, 0, offset_y, 1.0)
-            
+                return (True, 1.0, 0, -int(transition_progress * self.height), 1.0)
             elif self.cover_timeline == 'slide_down':
-                offset_y = int(transition_progress * self.height)
-                return (True, 1.0, 0, offset_y, 1.0)
+                return (True, 1.0, 0, int(transition_progress * self.height), 1.0)
         
         elif progress < 0.625:
-            # Hidden (25% duration)
             return (False, 0.0, 0, 0, 0.0)
         
         elif progress < 0.75:
-            # Bring back action (12.5% duration)
             transition_progress = (progress - 0.625) / 0.125
             
             if self.cover_timeline == 'fade':
-                alpha = transition_progress
-                return (True, 1.0, 0, 0, alpha)
-            
+                return (True, 1.0, 0, 0, transition_progress)
             elif self.cover_timeline == 'zoom':
-                scale = transition_progress
-                alpha = transition_progress
-                return (True, scale, 0, 0, alpha)
-            
+                return (True, transition_progress, 0, 0, transition_progress)
             elif self.cover_timeline == 'slide_up':
-                # Come in from bottom (negative at start, 0 at end)
-                offset_y = int((1.0 - transition_progress) * self.height)
-                return (True, 1.0, 0, offset_y, 1.0)
-            
+                return (True, 1.0, 0, int((1.0 - transition_progress) * self.height), 1.0)
             elif self.cover_timeline == 'slide_down':
-                # Come in from top (positive at start, 0 at end)
-                offset_y = -int((1.0 - transition_progress) * self.height)
-                return (True, 1.0, 0, offset_y, 1.0)
+                return (True, 1.0, 0, -int((1.0 - transition_progress) * self.height), 1.0)
         
         else:
-            # Last quarter: visible
             return (True, 1.0, 0, 0, 1.0)
     
     def _calculate_ring_stagger_offsets(self, frame_idx, total_frames):
         """
         Calculate rotation offsets for each ring based on stagger pattern
-        Returns: tuple of offsets in radians for each ring (dynamic based on ring_count)
+        Returns: tuple of offsets in radians for each ring
         """
         if self.ring_stagger == 'none' or self.ring_rotation == 'none':
             return tuple([0] * self.ring_count)
@@ -226,28 +199,17 @@ class MusicVisualizer:
         
         for r in range(self.ring_count):
             if self.ring_stagger == 'inner_catch':
-                # Inner rings start behind, catch up progressively
                 offset = -math.pi / 2 * (1 - progress) * (1 - r / max(self.ring_count - 1, 1))
-                
             elif self.ring_stagger == 'outer_catch':
-                # Outer rings start behind, catch up progressively
                 offset = -math.pi / 2 * (1 - progress) * (r / max(self.ring_count - 1, 1))
-                
             elif self.ring_stagger == 'inner_lead':
-                # Inner rings oscillate ahead and behind
-                cycle_frequency = 2
                 phase = r / max(self.ring_count - 1, 1) * math.pi / 3
-                offset = math.sin(progress * cycle_frequency * 2 * math.pi + phase) * math.pi / 3
-                
+                offset = math.sin(progress * 2 * 2 * math.pi + phase) * math.pi / 3
             elif self.ring_stagger == 'outer_lead':
-                # Outer rings oscillate ahead and behind
-                cycle_frequency = 2
                 phase = (1 - r / max(self.ring_count - 1, 1)) * math.pi / 3
-                offset = math.sin(progress * cycle_frequency * 2 * math.pi + phase) * math.pi / 3
-                
+                offset = math.sin(progress * 2 * 2 * math.pi + phase) * math.pi / 3
             else:
                 offset = 0
-            
             offsets.append(offset)
         
         return tuple(offsets)
@@ -267,12 +229,10 @@ class MusicVisualizer:
             self.audio_processor.magnitude
         )
         
-        # Update animation state using calculated rotation speeds with speed multipliers
+        # Update animation state
         rotation_speed = self.base_rotation_speed + (volume_intensity * self.volume_rotation_multiplier)
-        
-        # Apply separate speed multipliers for waveform and ring rotations
         self.rotation += rotation_speed * self.waveform_rotation_speed
-        self.cover_rotation -= rotation_speed * self.ring_rotation_speed * 2
+        self.cover_rotation += rotation_speed * self.ring_rotation_speed
         self.hue_offset = (self.hue_offset + HUE_SHIFT_BASE + volume_intensity) % 360
         
         # Initialize or fade trail buffer
@@ -286,7 +246,7 @@ class MusicVisualizer:
         # Start with faded trail
         img = self.trail_buffer.copy()
         
-        # Draw starfield (behind everything) - NOW WITH DIRECTION
+        # Draw starfield (behind everything)
         if not self.disable_starfield:
             self.effects_renderer.update_starfield(volume_intensity, self.starfield_rotation, self.starfield_direction)
             self.effects_renderer.draw_starfield(img, volume_intensity)
@@ -301,18 +261,15 @@ class MusicVisualizer:
         )
         
         # Rotate waveforms based on rotation setting
-        if self.waveform_rotation == 'none':
-            waveform_rotated = waveform_canvas
-        elif self.waveform_rotation == 'cw':
-            # Clockwise rotation (positive angle)
+        # PIL Image.rotate() is counter-clockwise positive, so negate for cw
+        if self.waveform_rotation == 'cw':
             waveform_rotated = waveform_canvas.rotate(
-                math.degrees(self.rotation), expand=False, 
+                -math.degrees(self.rotation), expand=False, 
                 fillcolor=(0, 0, 0), resample=Image.BILINEAR
             )
         elif self.waveform_rotation == 'ccw':
-            # Counter-clockwise rotation (negative angle)
             waveform_rotated = waveform_canvas.rotate(
-                -math.degrees(self.rotation), expand=False, 
+                math.degrees(self.rotation), expand=False, 
                 fillcolor=(0, 0, 0), resample=Image.BILINEAR
             )
         else:
@@ -333,21 +290,20 @@ class MusicVisualizer:
         # Calculate ring stagger offsets
         ring_offsets = self._calculate_ring_stagger_offsets(frame_idx, total_frames)
         
-        # Draw cover/rings on top (use cover_rotation which is affected by ring_rotation_speed)
+        # Draw cover and rings
         base_size = int(min(self.width, self.height) * 0.525 * self.cover_size)
         
-        # Apply timeline scale ONLY to cover, not to ring base size
         if cover_visible and cover_scale > 0:
             timeline_cover_size = int(base_size * cover_scale)
             
             self.effects_renderer.draw_cover_and_rings(
                 img=img,
                 cover_image=self.cover_image,
-                base_size=base_size,  # Rings use original base_size
-                cover_size_override=timeline_cover_size,  # Cover uses scaled size
+                base_size=base_size,
+                cover_size_override=timeline_cover_size,
                 volume_intensity=volume_intensity,
                 beat_intensity=beat_intensity,
-                rotation=self.cover_rotation,  # This rotation is affected by ring_rotation_speed
+                rotation=self.cover_rotation,
                 hue_offset=self.hue_offset,
                 bands=self.bands,
                 cover_shape=self.cover_shape,
@@ -366,7 +322,7 @@ class MusicVisualizer:
             # Still draw rings even if cover is hidden
             self.effects_renderer.draw_cover_and_rings(
                 img=img,
-                cover_image=None,  # No cover
+                cover_image=None,
                 base_size=base_size,
                 cover_size_override=base_size,
                 volume_intensity=volume_intensity,
@@ -412,39 +368,36 @@ class MusicVisualizer:
     
     def render(self):
         """Render the complete video with audio using hardware-accelerated encoding"""
-        # Calculate frames
         if self.preview_seconds:
             render_duration = min(self.preview_seconds, self.duration)
             total_frames = int(render_duration * self.fps)
-            print(f"⚡ PREVIEW MODE: Rendering first {render_duration:.1f}s")
+            print(f"PREVIEW MODE: Rendering first {render_duration:.1f}s")
         else:
             render_duration = self.duration
             total_frames = int(render_duration * self.fps)
         
-        print(f"🚀 Hardware Acceleration: VideoToolbox (Apple Silicon)")
+        print(f"Hardware Acceleration: VideoToolbox (Apple Silicon)")
         print(f"Rendering {total_frames} frames at {self.fps} fps...")
         
-        # Setup FFmpeg with hardware encoding (VideoToolbox for macOS)
         ffmpeg_cmd = [
             'ffmpeg',
-            '-y',  # Overwrite output
+            '-y',
             '-f', 'rawvideo',
             '-vcodec', 'rawvideo',
             '-s', f'{self.width}x{self.height}',
             '-pix_fmt', 'rgb24',
             '-r', str(self.fps),
-            '-i', '-',  # Read from stdin
-            '-i', self.audio_path,  # Audio input
-            '-c:v', 'h264_videotoolbox',  # Hardware encoder for macOS
-            '-b:v', '8M',  # Bitrate
+            '-i', '-',
+            '-i', self.audio_path,
+            '-c:v', 'h264_videotoolbox',
+            '-b:v', '8M',
             '-c:a', 'aac',
             '-b:a', '192k',
             '-shortest',
-            '-t', str(render_duration),  # Duration limit
+            '-t', str(render_duration),
             self.output_path
         ]
         
-        # Start FFmpeg process
         try:
             process = subprocess.Popen(
                 ffmpeg_cmd,
@@ -457,36 +410,27 @@ class MusicVisualizer:
             print("  brew install ffmpeg")
             return
         
-        # Render frames and pipe to FFmpeg
         try:
             for frame_idx in tqdm(range(total_frames)):
                 img = self.render_frame(frame_idx, total_frames)
-                
-                # Convert PIL Image to raw RGB bytes
-                frame_bytes = img.tobytes()
-                
-                # Write to FFmpeg stdin
-                process.stdin.write(frame_bytes)
+                process.stdin.write(img.tobytes())
             
-            # Close stdin to signal end of input
             process.stdin.close()
-            
-            # Wait for FFmpeg to finish
             process.wait()
             
             if process.returncode == 0:
-                print(f"\n✅ Video saved to: {self.output_path}")
+                print(f"\nVideo saved to: {self.output_path}")
             else:
                 stderr_output = process.stderr.read().decode('utf-8')
-                print(f"\n❌ FFmpeg error (return code {process.returncode}):")
-                print(stderr_output[-1000:])  # Last 1000 chars of error
+                print(f"\nFFmpeg error (return code {process.returncode}):")
+                print(stderr_output[-1000:])
                 
         except KeyboardInterrupt:
-            print("\n⚠️  Render interrupted by user")
+            print("\nRender interrupted by user")
             process.terminate()
             process.wait()
         except Exception as e:
-            print(f"\n❌ Error during render: {e}")
+            print(f"\nError during render: {e}")
             process.terminate()
             process.wait()
             import traceback
