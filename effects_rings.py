@@ -140,6 +140,9 @@ class RingRenderer:
             
             all_rings_draw = ImageDraw.Draw(all_rings_layer)
             
+            # Check if there's any stagger at all
+            has_any_stagger = any(s != 0 for s in ring_stagger_offsets)
+            
             for idx, band_idx in enumerate(rings_to_draw):
                 ring_spacing = 0.15 if ring_count <= 3 else 0.12
                 base_ring_size = base_size * (0.4 + idx * ring_spacing) * ring_scale
@@ -162,32 +165,38 @@ class RingRenderer:
                 # Calculate stagger offset for this ring
                 stagger_idx = idx % len(ring_stagger_offsets) if len(ring_stagger_offsets) > 0 else 0
                 ring_stagger_angle = math.degrees(ring_stagger_offsets[stagger_idx]) if len(ring_stagger_offsets) > 0 else 0
-                total_ring_angle = base_ring_angle + ring_stagger_angle
                 
-                # For staggered rotation, we need individual layers per ring
-                if ring_stagger_angle != 0 and needs_rotation:
+                # If there's any stagger at all, each ring needs individual handling
+                # This ensures ALL rings rotate (including those with 0 stagger offset)
+                if has_any_stagger and needs_rotation:
+                    # Draw each ring on its own layer with its specific rotation
                     if canvas_size:
                         ring_layer = Image.new('RGBA', (canvas_size, canvas_size), (0, 0, 0, 0))
                     else:
                         ring_layer = Image.new('RGBA', (self.width, self.height), (0, 0, 0, 0))
                     ring_draw = ImageDraw.Draw(ring_layer)
                     
+                    # Total angle = base rotation + this ring's stagger offset
+                    total_ring_angle = base_ring_angle + ring_stagger_angle
+                    
                     self._draw_modular_ring(ring_draw, canvas_center_x, canvas_center_y, 
                                           ring_size, ring_size, ring_shape_instance, 
                                           ring_color, line_width, beat_intensity)
                     
+                    # Rotate this ring by its total angle (base + stagger)
                     ring_layer = ring_layer.rotate(total_ring_angle, expand=False, 
                                                    fillcolor=(0, 0, 0, 0), 
                                                    resample=Image.BILINEAR)
                     
                     all_rings_layer = Image.alpha_composite(all_rings_layer, ring_layer)
                 else:
+                    # No stagger - draw all rings on main layer, will rotate together
                     self._draw_modular_ring(all_rings_draw, canvas_center_x, canvas_center_y, 
                                           ring_size, ring_size, ring_shape_instance, 
                                           ring_color, line_width, beat_intensity)
             
-            # Rotate all rings together if no stagger offsets are in play
-            if needs_rotation and all(s == 0 for s in ring_stagger_offsets):
+            # Rotate all rings together if no stagger (they're all on all_rings_layer as drawn)
+            if needs_rotation and not has_any_stagger:
                 all_rings_layer = all_rings_layer.rotate(base_ring_angle, expand=False, 
                                                         fillcolor=(0, 0, 0, 0), 
                                                         resample=Image.BILINEAR)
